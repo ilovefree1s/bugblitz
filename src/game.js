@@ -1667,27 +1667,123 @@ function cutTick(dt) {
 }
 // ---------------------------------------------------------------- neighbourhood map between campaign days
 const HOUSE_COL = ['#c94f3d', '#3f6fae', '#d8a23a', '#4f9a6a', '#7a7a84', '#b0607a'];
-function houseSvg(d, st) {
-  const L = houseLook(d), wall = L ? L.pal.cabFace : '#e8dcc4', roof = HOUSE_COL[(d - 1) % HOUSE_COL.length];
-  return `<svg viewBox="0 0 80 72"><path d="M6 34 40 8l34 26z" fill="${roof}" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round"/><rect x="14" y="32" width="52" height="34" fill="${wall}" stroke="#1a1a1a" stroke-width="3"/><rect x="34" y="44" width="13" height="22" fill="#6a4428" stroke="#1a1a1a" stroke-width="2"/><rect x="20" y="40" width="10" height="9" fill="${st === 'next' ? '#ffe27a' : '#9fc4e8'}" stroke="#1a1a1a" stroke-width="2"/><rect x="51" y="40" width="10" height="9" fill="${st === 'next' ? '#ffe27a' : '#9fc4e8'}" stroke="#1a1a1a" stroke-width="2"/>${st === 'done' ? '<circle cx="62" cy="16" r="11" fill="#4fbf3a" stroke="#1a1a1a" stroke-width="2.5"/><path d="M56 16l4 4 8-8" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>' : ''}${st === 'locked' ? '<circle cx="62" cy="16" r="10" fill="#2a2f35" stroke="#1a1a1a" stroke-width="2"/><text x="62" y="21" text-anchor="middle" font-size="13" font-weight="900" fill="#aab">?</text>' : ''}</svg>`;
+// top-down "satellite" street map: one street per day, HQ at the top, a route to the next job
+const NM_V = [{ x: 18, n: 'Willow Way' }, { x: 200, n: 'Polk St' }, { x: 382, n: 'Lake Blvd' }];
+const NM_TOP = 150, NM_GAP = 116, NM_RW = 20, NM_CB = 4;
+const nmCol = d => [0, 1, 1, 0, 1, 0, 0, 1][(d - 1) % 8];
+const nmStreetY = d => NM_TOP + (d - 1) * NM_GAP;
+function nmShort(n) { return n.replace(' Street', ' St').replace(' Lane', ' Ln').replace(' Court', ' Ct').replace(' Road', ' Rd').replace(' Avenue', ' Ave').replace(' Drive', ' Dr'); }
+function buildNMap(day, last) {
+  const S2 = [], P = s => S2.push(s); let seed = 11; const R = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const W = 400, Hh = nmStreetY(last) + NM_GAP + 10, RW = NM_RW, CB = NM_CB;
+  const HS = []; for (let d = 1; d <= last; d++) HS.push({ y: nmStreetY(d), n: nmShort(STREETS[(d - 1) % STREETS.length]) });
+  P(`<defs><filter id="nmtex" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .22 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+<filter id="nmsh" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="2.2" dy="2.6" stdDeviation="1" flood-color="#000" flood-opacity=".45"/></filter>
+<filter id="nmtsh" x="-30%" y="-30%" width="170%" height="170%"><feDropShadow dx="3" dy="3.5" stdDeviation="1.6" flood-color="#0a1a05" flood-opacity=".55"/></filter>
+<radialGradient id="nmglow"><stop offset="0" stop-color="#ffd23f" stop-opacity=".6"/><stop offset="1" stop-color="#ffd23f" stop-opacity="0"/></radialGradient>
+<linearGradient id="nmpool" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9fe8f2"/><stop offset="1" stop-color="#3fb6d0"/></linearGradient></defs>`);
+  P(`<rect width="${W}" height="${Hh}" fill="#5a7a3c"/>`);
+  const blocks = [];
+  for (let i = 0; i <= HS.length; i++) for (let j = 0; j < 2; j++) {
+    const y0 = (i ? HS[i - 1].y : -60) + RW / 2 + CB, y1 = (i < HS.length ? HS[i].y : Hh + 60) - RW / 2 - CB;
+    blocks.push({ x0: NM_V[j].x + RW / 2 + CB, x1: NM_V[j + 1].x - RW / 2 - CB, y0, y1, i, j });
+  }
+  const lawn = ['#6f9a48', '#7aa552', '#86a95a', '#a3a46a', '#6a8f44', '#93ab5e'];
+  blocks.forEach(b => {
+    const w = b.x1 - b.x0;
+    for (const row of [0, 1]) for (let k = 0; k < 3; k++) { const ly = row ? (b.y0 + b.y1) / 2 : b.y0; P(`<rect x="${b.x0 + k * w / 3 + .5}" y="${ly + .5}" width="${w / 3 - 1}" height="${(b.y1 - b.y0) / 2 - 1}" fill="${lawn[(R() * lawn.length) | 0]}"/>`); }
+    P(`<path d="M${b.x0} ${(b.y0 + b.y1) / 2}H${b.x1}M${b.x0 + w / 3} ${b.y0 + 6}V${b.y1 - 6}M${b.x0 + 2 * w / 3} ${b.y0 + 6}V${b.y1 - 6}" stroke="#7a6a4e" stroke-width=".9" opacity=".8"/>`);
+  });
+  HS.forEach(h => P(`<rect x="0" y="${h.y - RW / 2 - CB}" width="${W}" height="${RW + CB * 2}" fill="#b9b6ac"/>`));
+  NM_V.forEach(v => P(`<rect x="${v.x - RW / 2 - CB}" y="0" width="${RW + CB * 2}" height="${Hh}" fill="#b9b6ac"/>`));
+  HS.forEach(h => P(`<rect x="0" y="${h.y - RW / 2}" width="${W}" height="${RW}" fill="#6c6d6c"/>`));
+  NM_V.forEach(v => P(`<rect x="${v.x - RW / 2}" y="0" width="${RW}" height="${Hh}" fill="#6c6d6c"/>`));
+  NM_V.forEach(v => HS.forEach(h => { for (const sx of [-1, 1]) for (const sy of [-1, 1]) P(`<path d="M${v.x + sx * (RW / 2 + CB)} ${h.y + sy * (RW / 2 + CB + 5)}q0 ${-sy * 5} ${sx * 5} ${-sy * 5}" fill="none" stroke="#6c6d6c" stroke-width="3"/>`); }));
+  P(`<g stroke="#c9b45a" stroke-width=".9" opacity=".55">${HS.map(h => `<path d="M0 ${h.y}H${W}"/>`).join('')}${NM_V.map(v => `<path d="M${v.x} 0V${Hh}"/>`).join('')}</g>`);
+  P(`<rect width="${W}" height="${Hh}" fill="#888" filter="url(#nmtex)"/>`);
+  const RF = ['#6e6a66', '#7b736b', '#8a6e5c', '#5f6267', '#9a8a74', '#77706a', '#6a5e58'];
+  const roof = (x, y, w, h, c) => { const r = Math.min(w, h) / 2;
+    P(`<g filter="url(#nmsh)"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/><path d="M${x} ${y}L${x + r} ${y + h / 2}H${x + w - r}L${x + w} ${y}M${x} ${y + h}L${x + r} ${y + h / 2}M${x + w - r} ${y + h / 2}L${x + w} ${y + h}" stroke="rgba(255,255,255,.22)" stroke-width="1" fill="none"/><path d="M${x} ${y + h}L${x + r} ${y + h / 2}H${x + w - r}L${x + w} ${y + h}Z" fill="rgba(0,0,0,.18)"/></g>`); };
+  const tree = (x, y, r) => P(`<g filter="url(#nmtsh)"><circle cx="${x}" cy="${y}" r="${r}" fill="#2d5a22"/><circle cx="${x - r * .25}" cy="${y - r * .3}" r="${r * .7}" fill="#3c7029"/><circle cx="${x - r * .35}" cy="${y - r * .4}" r="${r * .35}" fill="#4e8a35"/></g>`);
+  const CARS = ['#e8e8ec', '#c23a2e', '#2a2d33', '#9aa2ac', '#d8c040'];
+  const car = (x, y, rot) => P(`<g transform="translate(${x} ${y}) rotate(${rot})" filter="url(#nmsh)"><rect x="-6.5" y="-3.2" width="13" height="6.4" rx="2.2" fill="${CARS[(R() * CARS.length) | 0]}"/><rect x="-2.5" y="-2.6" width="5" height="5.2" rx="1" fill="rgba(20,30,40,.55)"/></g>`);
+  const hq = blocks.find(b => b.i === 0 && b.j === 0);
+  blocks.forEach(b => {
+    if (b === hq) return;
+    const w = b.x1 - b.x0, third = w / 3, job = b.i >= 1 && b.i <= last && nmCol(b.i) === b.j;
+    [0, 1].forEach(row => {
+      const up = row === 0;
+      [0, 1, 2].forEach(k => {
+        if (R() >= .5 || (job && up && k === 1)) return;
+        const hw = 30 + R() * 8, hh = 24 + R() * 6, cx = b.x0 + k * third + third / 2, y = up ? b.y0 + 10 : b.y1 - 10 - hh;
+        P(`<rect x="${cx + hw / 2 - 10}" y="${up ? b.y0 - 1 : y + hh}" width="8" height="11" fill="#c3c0b6"/>`);
+        roof(cx - hw / 2, y, hw, hh, RF[(R() * RF.length) | 0]);
+        if (R() < .35) car(cx + hw / 2 - 6, up ? b.y0 + 4 : b.y1 - 4, 90);
+      });
+      if (R() < .25) P(`<rect x="${b.x0 + R() * (w - 30) + 6}" y="${up ? b.y0 + 44 : b.y1 - 58}" width="16" height="10" rx="3" fill="url(#nmpool)" stroke="#e8e4da" stroke-width="1.5"/>`);
+    });
+    for (let t = 0; t < 2 + R() * 3; t++) tree(b.x0 + 6 + R() * (w - 12), b.y0 + 6 + R() * (b.y1 - b.y0 - 12), 5 + R() * 5);
+  });
+  HS.forEach(h => { for (let t = 0; t < 2; t++) car(30 + R() * 340, h.y + (R() < .5 ? -5 : 5), 0); });
+  NM_V.forEach(v => { for (let t = 0; t < Math.ceil(Hh / 280); t++) car(v.x + (R() < .5 ? -5 : 5), 30 + R() * (Hh - 60), 90); });
+  // HQ lot + van
+  P(`<rect x="${hq.x0 + 4}" y="${hq.y0 + 4}" width="${hq.x1 - hq.x0 - 8}" height="${hq.y1 - hq.y0 - 8}" fill="#55585a"/>`);
+  for (let k = 0; k < 7; k++) P(`<path d="M${hq.x0 + 60 + k * 14} ${hq.y1 - 30}v18" stroke="#ddd" stroke-width="1"/>`);
+  P(`<g filter="url(#nmsh)"><rect x="${hq.x0 + 10}" y="${hq.y0 + 10}" width="48" height="${hq.y1 - hq.y0 - 20}" fill="#d8d4ca"/><rect x="${hq.x0 + 10}" y="${hq.y0 + 10}" width="48" height="12" fill="#d23b30"/></g>`);
+  const hqy = (hq.y0 + hq.y1) / 2;
+  P(`<text x="${hq.x0 + 34}" y="${hqy + 14}" text-anchor="middle" font-family="Luckiest Guy,Arial Black,sans-serif" font-size="9" fill="#d23b30" transform="rotate(-90 ${hq.x0 + 34} ${hqy + 14})">BUG BLITZ</text>`);
+  P(`<g transform="translate(${hq.x0 + 92} ${hq.y0 + 30})" filter="url(#nmsh)"><rect x="-13" y="-6" width="26" height="12" rx="3" fill="#f4efe4"/><rect x="7" y="-5" width="5" height="10" rx="1" fill="#7fd8ff"/><rect x="-11" y="-2" width="16" height="4" fill="#d23b30"/></g>`);
+  // job houses
+  const jobAt = d => { const b = blocks.find(q => q.i === d && q.j === nmCol(d)); return { x: (b.x0 + b.x1) / 2 - 18, y: b.y0 + 10, b }; };
+  const nx = jobAt(day);
+  P(`<path d="M${hq.x1 - 6} ${hq.y0 + 30} H${NM_V[1].x} V${nmStreetY(day)} H${nx.x + 18}" fill="none" stroke="#2fe3e8" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/><circle cx="${nx.x + 18}" cy="${nmStreetY(day)}" r="5" fill="#fff" stroke="#2fe3e8" stroke-width="2.5"/>`);
+  const lab = [];
+  for (let d = 1; d <= last; d++) {
+    const { x, y, b } = jobAt(d), st = d < day ? 'done' : d === day ? 'next' : 'lock', col = HOUSE_COL[(d - 1) % HOUSE_COL.length];
+    P(`<g class="nmjob${st === 'next' ? ' nmnext' : ''}" data-d="${d}">`);
+    if (st === 'next') P(`<circle cx="${x + 18}" cy="${y + 14}" r="46" fill="url(#nmglow)"/>`);
+    P(`<rect x="${x + 24}" y="${b.y0 - 1}" width="9" height="11" fill="#c3c0b6"/>`);
+    roof(x, y, 36, 28, st === 'lock' ? '#585c60' : col);
+    if (st === 'next') {
+      [[8, 8, 20], [24, 16, -40], [28, 6, 70], [12, 20, 140]].forEach(([dx, dy, r]) => P(`<g transform="translate(${x + dx} ${y + dy}) rotate(${r})" fill="#111"><ellipse rx="2.3" ry="3.2"/><circle cy="-3.6" r="1.6"/></g>`));
+      P(`<g transform="translate(${x + 18} ${y - 20})" filter="url(#nmsh)"><g class="nmpin"><path d="M0 22c-9-12-15-17-15-26a15 15 0 0 1 30 0c0 9-6 14-15 26z" fill="#d23b30" stroke="#3a0e08" stroke-width="2"/><circle cy="-4" r="7.5" fill="#fff"/><text y="0" text-anchor="middle" font-family="Luckiest Guy,Arial Black,sans-serif" font-size="11" fill="#d23b30">${d}</text></g></g>`);
+    }
+    if (st === 'done') P(`<g transform="translate(${x + 36} ${y})"><circle r="9" fill="#3fbf4a" stroke="#0f3a14" stroke-width="2"/><path d="M-4 0l3 3 5-6" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/></g>`);
+    if (st === 'lock') P(`<g transform="translate(${x + 18} ${y + 14})"><circle r="9" fill="#20262c" stroke="#0a0c0e" stroke-width="1.5"/><text y="4" text-anchor="middle" font-family="Luckiest Guy,Arial Black,sans-serif" font-size="11" fill="#9aa3ad">${d}</text></g>`);
+    P(`</g>`);
+    lab.push(`<text x="${x + 18}" y="${y + 44}" text-anchor="middle" font-weight="900" font-size="9.5" fill="${st === 'next' ? '#ffe27a' : '#fff'}" stroke="#111" stroke-width="3" paint-order="stroke">Day ${d} · ${esc(nmShort(houseName(d)))}</text>`);
+  }
+  S2.push(...lab);
+  const L = (x, y, t, r = 0) => P(`<text transform="translate(${x} ${y + 3}) rotate(${r})" text-anchor="middle" font-weight="800" font-size="9" fill="#fff" stroke="#1a1a1a" stroke-width="2.6" paint-order="stroke">${esc(t)}</text>`);
+  HS.forEach((h, k) => L(nmCol(k + 1) ? 110 : 290, h.y, h.n));
+  NM_V.forEach((v, k) => { for (let y = 90 + k * 140; y < Hh; y += 420) L(v.x, y, v.n, -90); });
+  return `<svg viewBox="0 0 ${W} ${Hh}" xmlns="http://www.w3.org/2000/svg" font-family="Nunito,system-ui,sans-serif">${S2.join('')}</svg>`;
 }
 function showDayMap() {
   const M = S && S.mapPick; if (!M) return;
   if (!$('daymap').hidden && $('daymap').dataset.d === String(M.day)) return;
   $('daymap').dataset.d = M.day;
   screen('daymap'); $('hud').hidden = true; $('banner').classList.remove('on'); bannerT = 0; bannerQ.length = 0;
-  const last = Math.max(M.day + 2, 5), first = Math.max(1, last - 6), out = [];
-  for (let d = first; d <= last; d++) {
-    const st = d < M.day ? 'done' : d === M.day ? 'next' : 'locked';
-    out.push(`<li class="${st}">${st === 'next' ? '<em>NEXT JOB</em>' : ''}${houseSvg(d, st)}<b>Day ${d}</b><small>${esc(houseName(d))}</small></li>`);
-  }
-  $('street').innerHTML = out.join('');
-  $('mapnote').textContent = 'Day ' + (M.day - 1) + ' done! ' + houseName(M.day) + ' is waiting. Your progress is saved.';
+  const day = M.day, last = Math.max(day + 3, 6);
+  $('nmap').innerHTML = buildNMap(day, last);
+  $('mapnote').innerHTML = 'Day ' + (day - 1) + ' cleared ✓<br>Next stop: ' + esc(nmShort(houseName(day)));
+  $('mapday').textContent = 'Day ' + day;
+  $('mapaddr').textContent = houseName(day);
+  const tier = day, boss = ROOM_BOSS[3].map(([k, d2]) => bossTitle(k, d2, tier)).join(' & ');
+  $('mapsub').innerHTML = 'Ants · Roaches · Spiders · <b>Basement: ' + esc(boss) + '</b> · ' + (day > 1 ? '+' + 25 * (day - 1) + '% tougher · ' : '') + (day + 1) + ' blocks from HQ';
   $('mapgo').hidden = role === 'client'; $('mapquit').textContent = role === 'client' ? 'Leave game' : 'Save & quit';
   $('mapwait').hidden = role !== 'client';
-  $('mapgo').textContent = 'Start Day ' + M.day;
-  requestAnimationFrame(() => { const n = $('street').querySelector('.next'); if (n) n.scrollIntoView({ inline: 'center', block: 'nearest' }); });
+  $('mapgo').textContent = 'Start Day ' + day;
+  const nx = $('nmap').querySelector('.nmnext');
+  if (nx) nx.addEventListener('click', mapStart);
+  requestAnimationFrame(nmCenter);
 }
+function nmCenter() {
+  const box = $('nmap'), svg = box && box.querySelector('svg'); if (!svg || $('daymap').hidden || !S || !S.mapPick) return;
+  const k = svg.getBoundingClientRect().width / 400, wide = innerWidth >= innerHeight;
+  box.scrollTop = Math.max(0, (nmStreetY(S.mapPick.day) + 20) * k - box.clientHeight * (wide ? 0.5 : 0.4));
+}
+addEventListener('resize', () => requestAnimationFrame(nmCenter));
 function mapStart() {
   if (role === 'client' || !S || !S.mapPick) return;
   const d = S.mapPick.day; S.mapPick = null; $('daymap').hidden = true; $('daymap').dataset.d = '';
