@@ -998,19 +998,21 @@ function fitExtModel(root, suitHex) {
   const mixer = new THREE.AnimationMixer(m), clip = n => EXTG.animations.find(a => a.name === n);
   const walk = clip('Walking') ? mixer.clipAction(clip('Walking')) : null, run = clip('Running') ? mixer.clipAction(clip('Running')) : null;
   // the spray nozzle: the vertex furthest from the right hand that moves with the hand (the end of the wand)
-  const tip = new THREE.Object3D(); bones.RHand.add(tip);
+  const tip = new THREE.Object3D(); bones.RHand.add(tip); root.updateMatrixWorld(true);
   m.traverse(o => {
     if (!o.isSkinnedMesh) return;
-    const P = o.geometry.attributes.position, J = o.geometry.attributes.skinIndex, Wt = o.geometry.attributes.skinWeight, hi = o.skeleton.bones.indexOf(bones.RHand);
+    // the wand may be skinned to the hand or to a finger bone (the newer model puts it on the middle finger)
+    const P = o.geometry.attributes.position, J = o.geometry.attributes.skinIndex, Wt = o.geometry.attributes.skinWeight;
+    const hand = new Set(); bones.RHand.traverse(b => { const k = o.skeleton.bones.indexOf(b); if (k >= 0) hand.add(k); });
     o.updateMatrixWorld(true); o.skeleton.update();
-    const hp = bones.RHand.getWorldPosition(new V3()); let best = null, bd = -1;
+    const hp = bones.RHand.getWorldPosition(new V3()); let best = null, bd = -1, bb = -1;
     for (let i = 0; i < P.count; i++) {
-      let w = 0; for (let c = 0; c < 4; c++) if (J.getComponent(i, c) === hi) w += Wt.getComponent(i, c);
+      let w = 0, top = -1, tw = 0; for (let c = 0; c < 4; c++) { const j = J.getComponent(i, c), q = Wt.getComponent(i, c); if (hand.has(j)) w += q; if (q > tw) { tw = q; top = j; } }
       if (w < 0.6) continue;
       const v = o.getVertexPosition(i, EV1).applyMatrix4(o.matrixWorld), d = v.distanceTo(hp);
-      if (d > bd) { bd = d; best = v.clone(); }
+      if (d > bd) { bd = d; best = v.clone(); bb = top; }
     }
-    if (best) tip.position.copy(bones.RHand.worldToLocal(best));
+    if (best) { const holder = hand.has(bb) ? o.skeleton.bones[bb] : bones.RHand; holder.add(tip); holder.updateMatrixWorld(true); tip.position.copy(holder.worldToLocal(best)); }
   });
   u.tip = tip;
   // keep the candle and the beekeeper hat: the candle goes in his left hand, the hat on his head
