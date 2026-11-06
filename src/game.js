@@ -1766,7 +1766,7 @@ function showDayMap() {
   screen('daymap'); $('hud').hidden = true; $('banner').classList.remove('on'); bannerT = 0; bannerQ.length = 0;
   const day = M.day, last = Math.max(day + 3, 6);
   $('nmap').innerHTML = buildNMap(day, last);
-  $('mapnote').innerHTML = 'Day ' + (day - 1) + ' cleared ✓<br>Next stop: ' + esc(nmShort(houseName(day)));
+  $('mapnote').innerHTML = (M.first || day === 1 ? 'Today\'s job' : 'Day ' + (day - 1) + ' cleared ✓') + '<br>Next stop: ' + esc(nmShort(houseName(day)));
   $('mapday').textContent = 'Day ' + day;
   $('mapaddr').textContent = houseName(day);
   const tier = day, boss = ROOM_BOSS[3].map(([k, d2]) => bossTitle(k, d2, tier)).join(' & ');
@@ -1977,7 +1977,7 @@ function applySnapshot(s) {
   setRoomVisual(s.HM ? s.HM[1] : 0, s.HM ? s.HM[0] : 1); if (s.A) applyArena(s.A); S.fade = s.HM ? s.HM[2] / 100 : 0;
   S.door = s.DR ? { x: s.DR[0] / 10, z: s.DR[1] / 10, open: s.DR[2] / 100, exit: s.DR[3], last: s.DR[4] } : null; S.doorWait = s.DW || null;
   S.trans = s.TR ? { room: s.TR[0], off: s.TR[1], A: s.TR[2] } : null; if (S.trans) buildNeighbor(S.trans.room, S.house || 1, S.trans.A, S.trans.off);
-  if (s.MP) S.mapPick = { day: s.MP }; else if (S.mapPick) { S.mapPick = null; $('daymap').hidden = true; $('daymap').dataset.d = ''; enterGameUi(); }
+  if (s.MP) S.mapPick = { day: Math.abs(s.MP), first: s.MP < 0 }; else if (S.mapPick) { S.mapPick = null; $('daymap').hidden = true; $('daymap').dataset.d = ''; enterGameUi(); }
   if (s.CUT) { if (!S.cut) S.cut = { t: s.CUT[0] / 100, day: s.CUT[1] }; S.cut.tt = s.CUT[0] / 100; S.cut.day = s.CUT[1]; } else S.cut = null;
   S.t = s.t; S.lvl = s.lv; S.xp = s.xp; S.need = s.nd; S.kills = s.k; S.queens = s.qn;
   // bugs
@@ -2657,7 +2657,9 @@ function beginRound() {   // solo and host
   // open with a handful of ants already in view at the screen edges, so there's something to squash right away
   for (const p of S.players) for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + rand(-0.4, 0.4), d = rand(17, 20); spawnBug(0, p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, true); }
   mode = 'play'; lastHp = 100;
-  enterGameUi(); banner(S.endless ? 'Kitchen: ants! Fight your way to the basement' : 'Day ' + S.house + ': ' + houseName(S.house) + '. Kitchen, ants!');
+  enterGameUi();
+  if (S.endless) banner('Kitchen: ants! Fight your way to the basement');
+  else S.mapPick = { day: S.house, first: true };   // Campaign opens on the neighbourhood map, so you see the job before you roll out
 }
 function addRemote(id, name) {
   if (S.players.some(p => p.id === id) || S.players.length >= 4) return;
@@ -3233,7 +3235,7 @@ function sendSnapshot() {
     DW: S.doorWait || 0,
     TR: S.trans ? [S.trans.room, S.trans.off, S.trans.A] : 0,
     CUT: S.cut ? [Math.round(S.cut.t * 100), S.cut.day] : 0,
-    MP: S.mapPick ? S.mapPick.day : 0,
+    MP: S.mapPick ? S.mapPick.day * (S.mapPick.first ? -1 : 1) : 0,
   };
   net.send('snap', snap);
 }
