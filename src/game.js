@@ -1668,7 +1668,7 @@ function cutTick(dt) {
 // ---------------------------------------------------------------- neighbourhood map between campaign days
 const HOUSE_COL = ['#c94f3d', '#3f6fae', '#d8a23a', '#4f9a6a', '#7a7a84', '#b0607a'];
 // top-down "satellite" street map: one street per day, HQ at the top, a route to the next job
-const NM_V = [{ x: 18, n: 'Willow Way' }, { x: 200, n: 'Polk St' }, { x: 382, n: 'Lake Blvd' }];
+const NM_V = [{ x: 18, n: 'Main St' }, { x: 200, n: 'Polk St' }, { x: 382, n: 'Lake Blvd' }];
 const NM_TOP = 150, NM_GAP = 116, NM_RW = 20, NM_CB = 4;
 const nmCol = d => [0, 1, 1, 0, 1, 0, 0, 1][(d - 1) % 8];
 const nmStreetY = d => NM_TOP + (d - 1) * NM_GAP;
@@ -1708,21 +1708,100 @@ function buildNMap(day, last) {
   const CARS = ['#e8e8ec', '#c23a2e', '#2a2d33', '#9aa2ac', '#d8c040'];
   const car = (x, y, rot) => P(`<g transform="translate(${x} ${y}) rotate(${rot})" filter="url(#nmsh)"><rect x="-6.5" y="-3.2" width="13" height="6.4" rx="2.2" fill="${CARS[(R() * CARS.length) | 0]}"/><rect x="-2.5" y="-2.6" width="5" height="5.2" rx="1" fill="rgba(20,30,40,.55)"/></g>`);
   const hq = blocks.find(b => b.i === 0 && b.j === 0);
+  const lab = [];
+  const place = (x, y, t) => lab.push(`<text x="${x}" y="${y}" text-anchor="middle" font-weight="900" font-size="8.5" fill="#fff" stroke="#1a1a1a" stroke-width="2.6" paint-order="stroke">${esc(t)}</text>`);
+  const pick = a => a[(R() * a.length) | 0];
+  const lot = (x, y, w, h) => { P(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#5d5f60"/>`); let d = ''; for (let k = x + 8; k < x + w - 4; k += 11) d += `M${k} ${y + 3}v10M${k} ${y + h - 13}v10`; P(`<path d="${d}" stroke="#d8d8d0" stroke-width=".9"/>`); for (let k = 0; k < (w / 26) | 0; k++) if (R() < .6) car(x + 13 + k * 22 + (R() < .5 ? 0 : 11), R() < .5 ? y + 8 : y + h - 8, 90); };
+  const flat = (x, y, w, h, c = '#b7b4ac') => { P(`<g filter="url(#nmsh)"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" stroke="rgba(0,0,0,.25)" stroke-width="1"/></g>`); for (let k = 0; k < w / 22; k++) P(`<rect x="${x + 6 + k * 20 + R() * 6}" y="${y + 4 + R() * (h - 12)}" width="6" height="5" fill="#8e9094" stroke="#6a6c70" stroke-width=".6"/>`); };
+  const KINDS = {
+    homes(b, job) {
+      const w = b.x1 - b.x0, third = w / 3;
+      [0, 1].forEach(row => {
+        const up = row === 0;
+        [0, 1, 2].forEach(k => {
+          if (job && up && k === 1) return;
+          if (R() < .1) { tree(b.x0 + k * third + third / 2, up ? b.y0 + 20 : b.y1 - 20, 9); return; }
+          const hw = 28 + R() * 9, hh = 21 + R() * 4, cx = b.x0 + k * third + third / 2 + (R() - .5) * 4, y = up ? b.y0 + 9 : b.y1 - 9 - hh;
+          P(`<rect x="${cx + hw / 2 - 10}" y="${up ? b.y0 - 1 : y + hh}" width="8" height="10" fill="#c3c0b6"/>`);
+          roof(cx - hw / 2, y, hw, hh, RF[(R() * RF.length) | 0]);
+          if (R() < .35) car(cx + hw / 2 - 6, up ? b.y0 + 4 : b.y1 - 4, 90);
+        });
+      });
+      const my = (b.y0 + b.y1) / 2;
+      for (let k = 0; k < 3; k++) if (R() < .3) P(`<rect x="${b.x0 + k * third + 10 + R() * 18}" y="${my - 5}" width="15" height="9" rx="3" fill="url(#nmpool)" stroke="#e8e4da" stroke-width="1.3"/>`);
+      for (let t = 0; t < 3; t++) tree(b.x0 + 6 + R() * (w - 12), my + (R() - .5) * 10, 4 + R() * 3);
+    },
+    park(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0, cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#5f9a42"/><rect x="${b.x0 + 3}" y="${b.y0 + 3}" width="${w - 6}" height="${h - 6}" rx="10" fill="none" stroke="#d8cfa8" stroke-width="3.5"/>`);
+      P(`<path d="M${b.x0 + 3} ${cy}H${b.x1 - 3}M${cx} ${b.y0 + 3}V${b.y1 - 3}" stroke="#d8cfa8" stroke-width="3"/><circle cx="${cx}" cy="${cy}" r="9" fill="#d8cfa8"/><circle cx="${cx}" cy="${cy}" r="4" fill="#7fc8e8" stroke="#c9c2a8" stroke-width="1.2"/>`);
+      P(`<ellipse cx="${b.x0 + w * .25}" cy="${b.y0 + h * .27}" rx="${w * .14}" ry="${h * .14}" fill="#4aa6c8" stroke="#3a7a5a" stroke-width="2"/>`);
+      const px = b.x1 - w * .4, py = b.y1 - h * .44;
+      P(`<rect x="${px}" y="${py}" width="${w * .3}" height="${h * .3}" rx="4" fill="#dcc48a"/><rect x="${px + 5}" y="${py + 5}" width="14" height="5" fill="#d23b30"/><rect x="${px + 24}" y="${py + 4}" width="3" height="16" fill="#3f6fae"/><circle cx="${px + 12}" cy="${py + 18}" r="4" fill="none" stroke="#e8b830" stroke-width="2"/>`);
+      for (let t = 0; t < 9; t++) { const x = b.x0 + 8 + R() * (w - 16), y = b.y0 + 8 + R() * (h - 16); if (Math.abs(x - cx) > 8 && Math.abs(y - cy) > 8) tree(x, y, 5 + R() * 4); }
+      place(cx, cy - 13, pick(['Maple Park', 'Oak Grove Park', 'Willow Park', 'Cedar Green']));
+    },
+    shops(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#c9c6bd"/>`);
+      flat(b.x0 + 4, b.y0 + 4, w - 8, 32);
+      const names = ['PIZZA', 'DONUTS', 'HARDWARE', 'TACOS', 'LAUNDRY', 'GROCERY', 'BARBER', 'GAMES', 'PETS', 'NAILS'];
+      const AW = ['#d23b30', '#3f6fae', '#2f9a4a', '#e8a020', '#8a4ab0'];
+      const n = 3, sw = (w - 8) / n;
+      const o = (R() * names.length) | 0;
+      for (let k = 0; k < n; k++) { P(`<rect x="${b.x0 + 5 + k * sw}" y="${b.y0 + 33}" width="${sw - 2}" height="5" fill="${AW[(o + k) % AW.length]}"/>`); P(`<text x="${b.x0 + 4 + k * sw + sw / 2}" y="${b.y0 + 24}" text-anchor="middle" font-family="Luckiest Guy,Arial Black,sans-serif" font-size="7" fill="#3a3a3a" opacity=".85">${names[(o + k * 3) % names.length]}</text>`); }
+      lot(b.x0 + 4, b.y0 + 44, w - 8, h - 48);
+    },
+    gas(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0, gx = b.x0 + 10, gw = w * .45;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#626466"/>`);
+      P(`<g filter="url(#nmsh)"><rect x="${gx}" y="${b.y0 + 22}" width="${gw}" height="${h - 44}" fill="#efede6"/><rect x="${gx}" y="${b.y0 + 22}" width="${gw}" height="5" fill="#d23b30"/></g>`);
+      for (let k = 0; k < 3; k++) P(`<rect x="${gx + 12 + k * (gw - 24) / 2 - 3}" y="${b.y0 + h / 2 - 1}" width="6" height="8" fill="#3a3c40"/>`);
+      flat(b.x1 - w * .33, b.y0 + 10, w * .3, h - 22, '#d6d2c4');
+      P(`<text x="${gx + gw / 2}" y="${b.y0 + 39}" text-anchor="middle" font-family="Luckiest Guy,Arial Black,sans-serif" font-size="9" fill="#d23b30">GAS</text>`);
+      if (R() < .7) car(gx + 18, b.y0 + h / 2 + 12, 0); if (R() < .6) car(gx + gw - 18, b.y0 + h / 2 - 8, 0);
+      place(b.x1 - w * .18, b.y1 - 4, 'Quick Mart');
+    },
+    school(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#7aa552"/>`);
+      P(`<g filter="url(#nmsh)"><path d="M${b.x0 + 6} ${b.y0 + 6}h52v18h-32v${h - 30}h-20z" fill="#b39478" stroke="rgba(0,0,0,.25)"/></g>`);
+      const tx = b.x0 + 64, tw = w - 70;
+      P(`<rect x="${tx}" y="${b.y0 + 6}" width="${tw}" height="${h - 12}" rx="${(h - 12) / 2}" fill="#b5523a"/><rect x="${tx + 7}" y="${b.y0 + 13}" width="${tw - 14}" height="${h - 26}" rx="${(h - 26) / 2}" fill="#5aa83e"/><path d="M${tx + tw / 2} ${b.y0 + 13}v${h - 26}" stroke="#fff" stroke-width="1" opacity=".7"/><circle cx="${tx + tw / 2}" cy="${(b.y0 + b.y1) / 2}" r="7" fill="none" stroke="#fff" stroke-width="1" opacity=".7"/>`);
+      P(`<rect x="${b.x0 + 30}" y="${b.y0 + 30}" width="24" height="${h - 36}" fill="#5d5f60"/>`);
+      place(b.x0 + 34, b.y0 + 19, 'School');
+    },
+    ball(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0, hx = b.x0 + 50, hy = b.y1 - 8, d = 30;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#68a848"/><path d="M${hx} ${hy}L${hx + 60} ${hy - 60}A85 85 0 0 0 ${hx - 60} ${hy - 60}Z" fill="#74b452" stroke="#e8e4da" stroke-width="1"/>`);
+      P(`<polygon points="${hx},${hy + 4} ${hx + d + 4},${hy - d} ${hx},${hy - 2 * d - 4} ${hx - d - 4},${hy - d}" fill="#c9965e"/><polygon points="${hx},${hy - 6} ${hx + d - 8},${hy - d} ${hx},${hy - 2 * d + 6} ${hx - d + 8},${hy - d}" fill="#7cbc58"/><circle cx="${hx}" cy="${hy - d}" r="4" fill="#c9965e"/>`);
+      P(`<g fill="#fff">${[[0, 0], [d, -d], [0, -2 * d], [-d, -d]].map(([x, y]) => `<rect x="${hx + x - 2}" y="${hy + y - 2}" width="4" height="4"/>`).join('')}</g><path d="M${hx - 12} ${hy + 6}h24" stroke="#ccc" stroke-width="2"/>`);
+      lot(b.x1 - 48, b.y0 + 6, 42, h - 12);
+      place(b.x0 + 50, b.y0 + 12, 'Little League');
+    },
+    church(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0, cx = b.x0 + 46, cy = (b.y0 + b.y1) / 2;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#7aa552"/>`);
+      P(`<g filter="url(#nmsh)"><path d="M${cx - 10} ${b.y0 + 8}h20v18h18v16h-18v${h - 50}h-20v${-(h - 50)}h-18v-16h18z" fill="#8a6e5c"/><path d="M${cx} ${b.y0 + 8}V${b.y1 - 8}M${cx - 28} ${b.y0 + 34}H${cx + 28}" stroke="rgba(255,255,255,.25)"/></g>`);
+      lot(b.x0 + 86, b.y0 + 6, w - 92, h - 12);
+      tree(b.x0 + 12, b.y1 - 12, 8); tree(b.x0 + 78, b.y0 + 12, 7);
+      place(cx, b.y1 - 4, 'Chapel');
+    },
+    pool(b) {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0;
+      P(`<rect x="${b.x0}" y="${b.y0}" width="${w}" height="${h}" fill="#7aa552"/><rect x="${b.x0 + 8}" y="${b.y0 + 10}" width="${w * .5}" height="${h - 20}" fill="#e6e0d0"/><rect x="${b.x0 + 16}" y="${b.y0 + 18}" width="${w * .5 - 16}" height="${h - 36}" rx="3" fill="url(#nmpool)"/>`);
+      let d = ''; for (let k = 1; k < 4; k++) d += `M${b.x0 + 16} ${b.y0 + 18 + k * (h - 36) / 4}h${w * .5 - 16}`; P(`<path d="${d}" stroke="#fff" stroke-width=".8" stroke-dasharray="3 2"/>`);
+      flat(b.x0 + w * .58 + 4, b.y0 + 10, w * .38, 26, '#c8c0b0'); lot(b.x0 + w * .58 + 4, b.y0 + 42, w * .38, h - 48);
+      place(b.x0 + w * .3, b.y0 + 8, 'Town Pool');
+    },
+  };
+  const SPECIAL = ['park', 'shops', 'school', 'gas', 'ball', 'church', 'shops', 'pool', 'park'];
+  let sp = 0, lastSpecial = -9;
   blocks.forEach(b => {
     if (b === hq) return;
-    const w = b.x1 - b.x0, third = w / 3, job = b.i >= 1 && b.i <= last && nmCol(b.i) === b.j;
-    [0, 1].forEach(row => {
-      const up = row === 0;
-      [0, 1, 2].forEach(k => {
-        if (R() >= .5 || (job && up && k === 1)) return;
-        const hw = 30 + R() * 8, hh = 24 + R() * 6, cx = b.x0 + k * third + third / 2, y = up ? b.y0 + 10 : b.y1 - 10 - hh;
-        P(`<rect x="${cx + hw / 2 - 10}" y="${up ? b.y0 - 1 : y + hh}" width="8" height="11" fill="#c3c0b6"/>`);
-        roof(cx - hw / 2, y, hw, hh, RF[(R() * RF.length) | 0]);
-        if (R() < .35) car(cx + hw / 2 - 6, up ? b.y0 + 4 : b.y1 - 4, 90);
-      });
-      if (R() < .25) P(`<rect x="${b.x0 + R() * (w - 30) + 6}" y="${up ? b.y0 + 44 : b.y1 - 58}" width="16" height="10" rx="3" fill="url(#nmpool)" stroke="#e8e4da" stroke-width="1.5"/>`);
-    });
-    for (let t = 0; t < 2 + R() * 3; t++) tree(b.x0 + 6 + R() * (w - 12), b.y0 + 6 + R() * (b.y1 - b.y0 - 12), 5 + R() * 5);
+    const job = b.i >= 1 && b.i <= last && nmCol(b.i) === b.j;
+    if (!job && R() < .68 && lastSpecial !== b.i) { lastSpecial = b.i; KINDS[SPECIAL[sp++ % SPECIAL.length]](b); }
+    else KINDS.homes(b, job);
   });
   HS.forEach(h => { for (let t = 0; t < 2; t++) car(30 + R() * 340, h.y + (R() < .5 ? -5 : 5), 0); });
   NM_V.forEach(v => { for (let t = 0; t < Math.ceil(Hh / 280); t++) car(v.x + (R() < .5 ? -5 : 5), 30 + R() * (Hh - 60), 90); });
@@ -1737,7 +1816,6 @@ function buildNMap(day, last) {
   const jobAt = d => { const b = blocks.find(q => q.i === d && q.j === nmCol(d)); return { x: (b.x0 + b.x1) / 2 - 18, y: b.y0 + 10, b }; };
   const nx = jobAt(day);
   P(`<path d="M${hq.x1 - 6} ${hq.y0 + 30} H${NM_V[1].x} V${nmStreetY(day)} H${nx.x + 18}" fill="none" stroke="#2fe3e8" stroke-width="5" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/><circle cx="${nx.x + 18}" cy="${nmStreetY(day)}" r="5" fill="#fff" stroke="#2fe3e8" stroke-width="2.5"/>`);
-  const lab = [];
   for (let d = 1; d <= last; d++) {
     const { x, y, b } = jobAt(d), st = d < day ? 'done' : d === day ? 'next' : 'lock', col = HOUSE_COL[(d - 1) % HOUSE_COL.length];
     P(`<g class="nmjob${st === 'next' ? ' nmnext' : ''}" data-d="${d}">`);
@@ -2731,12 +2809,7 @@ $('mapquit').addEventListener('click', mapQuit);
 function syncModeUi() {
   document.querySelectorAll('.modes .mode').forEach(b => { const on = b.dataset.m === gameMode; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
   startDayPick = Math.min(Math.max(1, startDayPick || maxDay), maxDay);
-  const dz = $('days'); dz.hidden = !(gameMode === 'house' && maxDay > 1);
-  if (!dz.hidden) {
-    const from = Math.max(1, maxDay - 5);
-    dz.innerHTML = 'Start on: ' + Array.from({ length: maxDay - from + 1 }, (_, i) => from + i).map(d => `<button type="button" class="day${d === startDayPick ? ' on' : ''}" data-d="${d}">Day ${d}</button>`).join('');
-    dz.querySelectorAll('.day').forEach(b => b.addEventListener('click', () => { startDayPick = +b.dataset.d; syncModeUi(); }));
-  }
+  startDayPick = maxDay; $('days').hidden = true;   // no day picker: Campaign always picks up where you left off
   $('title').querySelector('.sub').textContent = gameMode === 'house'
     ? 'Campaign: a new house every day. Clear the kitchen, living room, garage and basement, one boss at a time.'
     : 'Survival: fight room by room down to the basement, then hold out against endless waves and bosses.';
